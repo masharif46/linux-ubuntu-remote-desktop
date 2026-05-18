@@ -76,6 +76,37 @@ Host myserver-rdp
 
 Then just: `ssh -N -f myserver-rdp`
 
+#### Or, with Bitvise SSH Client (Windows GUI)
+
+Bitvise has built-in RDP integration — easier than manual `ssh -L`.
+
+**Easiest path — one-click RDP:**
+
+1. Connect to the server in Bitvise as usual.
+2. In the main window, click **"New Remote Desktop"** (right-hand side panel).
+3. Bitvise sets up the tunnel and launches `mstsc` automatically.
+
+**Manual path — explicit C2S port forwarding:**
+
+In the profile, **before** connecting, open the **C2S** tab (Bitvise's term for OpenSSH `-L` local forwarding) and add:
+
+| Field | Value |
+|---|---|
+| Listen Interface | `127.0.0.1` |
+| List. Port | `3389` |
+| Destination Host | `127.0.0.1` |
+| Dest. Port | `3389` |
+
+Connect, then point any RDP client (`mstsc`, Remmina, etc.) at `127.0.0.1:3389`.
+
+**Keep-alive (recommended either path):**
+
+Under the **Options** tab:
+- Keepalive interval: `30` seconds
+- Max idle time: `0` (never disconnect)
+
+This is the Bitvise equivalent of `ServerAliveInterval=30 ServerAliveCountMax=6`.
+
 ### 2. Point your RDP client to `127.0.0.1:3389`
 
 Works with:
