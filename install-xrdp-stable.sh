@@ -91,7 +91,24 @@ adduser xrdp ssl-cert >/dev/null 2>&1 || true
 ok "xrdp added to ssl-cert"
 
 #------------------------------------------------------------------------------
-# 4. Disable Wayland (xrdp requires Xorg)
+# 4. Disable competing remote-desktop servers (gnome-remote-desktop)
+#------------------------------------------------------------------------------
+# Ubuntu Desktop ships gnome-remote-desktop, which also binds port 3389 and
+# shares the GNOME session. If both are running, one wins randomly and you get
+# wrong DE / wrong auth path / silent failures. Disable both the system-level
+# and per-user instances, then purge the package.
+log "Disabling gnome-remote-desktop (if present)..."
+systemctl disable --now gnome-remote-desktop.service 2>/dev/null || true
+TARGET_UID=$(id -u "$TARGET_USER" 2>/dev/null)
+if [[ -n "$TARGET_UID" ]]; then
+    sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="/run/user/$TARGET_UID" \
+        systemctl --user disable --now gnome-remote-desktop.service 2>/dev/null || true
+fi
+apt-get remove --purge gnome-remote-desktop -y 2>/dev/null || true
+ok "gnome-remote-desktop disabled/removed (if it was installed)"
+
+#------------------------------------------------------------------------------
+# 5. Disable Wayland (xrdp requires Xorg)
 #------------------------------------------------------------------------------
 if [[ -f /etc/gdm3/custom.conf ]]; then
     log "Disabling Wayland in GDM..."
@@ -102,7 +119,7 @@ if [[ -f /etc/gdm3/custom.conf ]]; then
 fi
 
 #------------------------------------------------------------------------------
-# 5. Allow non-console users to start Xorg (required for xrdp)
+# 6. Allow non-console users to start Xorg (required for xrdp)
 #------------------------------------------------------------------------------
 # xserver-xorg-legacy wraps Xorg with /usr/lib/xorg/Xorg.wrap, which by default
 # only lets physically-logged-in console users start an X server. xrdp launches
@@ -116,7 +133,7 @@ EOF
 ok "Xwrapper.config: allowed_users=anybody"
 
 #------------------------------------------------------------------------------
-# 6. Configure .xsession for the target user (XFCE)
+# 7. Configure .xsession for the target user (XFCE)
 #------------------------------------------------------------------------------
 log "Configuring XFCE session for $TARGET_USER..."
 cat > "$TARGET_HOME/.xsession" <<'EOF'
@@ -141,7 +158,7 @@ chown "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.xsessionrc"
 ok ".xsession and .xsessionrc created"
 
 #------------------------------------------------------------------------------
-# 7. Write /etc/xrdp/xrdp.ini (localhost-only, stable settings)
+# 8. Write /etc/xrdp/xrdp.ini (localhost-only, stable settings)
 #------------------------------------------------------------------------------
 log "Writing /etc/xrdp/xrdp.ini..."
 cat > /etc/xrdp/xrdp.ini <<'EOF'
@@ -217,7 +234,7 @@ EOF
 ok "xrdp.ini written (binding to 127.0.0.1:3389)"
 
 #------------------------------------------------------------------------------
-# 8. Write /etc/xrdp/sesman.ini (session persistence settings)
+# 9. Write /etc/xrdp/sesman.ini (session persistence settings)
 #------------------------------------------------------------------------------
 log "Writing /etc/xrdp/sesman.ini..."
 cat > /etc/xrdp/sesman.ini <<'EOF'
@@ -273,7 +290,7 @@ EOF
 ok "sesman.ini written (Policy=UBDI, sessions never killed)"
 
 #------------------------------------------------------------------------------
-# 9. Patch /etc/xrdp/startwm.sh to honor .xsession
+# 10. Patch /etc/xrdp/startwm.sh to honor .xsession
 #------------------------------------------------------------------------------
 log "Patching /etc/xrdp/startwm.sh..."
 cat > /etc/xrdp/startwm.sh <<'EOF'
@@ -307,7 +324,7 @@ chmod +x /etc/xrdp/startwm.sh
 ok "startwm.sh patched"
 
 #------------------------------------------------------------------------------
-# 10. Fix polkit popups (color manager auth dialog inside RDP)
+# 11. Fix polkit popups (color manager auth dialog inside RDP)
 #------------------------------------------------------------------------------
 log "Adding polkit rules to suppress auth popups..."
 mkdir -p /etc/polkit-1/localauthority/50-local.d
@@ -331,7 +348,7 @@ EOF
 ok "Polkit rules installed"
 
 #------------------------------------------------------------------------------
-# 11. Firewall: allow 3389 only from localhost
+# 12. Firewall: allow 3389 only from localhost
 #------------------------------------------------------------------------------
 log "Configuring UFW (3389 localhost-only)..."
 if command -v ufw >/dev/null 2>&1; then
@@ -360,7 +377,7 @@ else
 fi
 
 #------------------------------------------------------------------------------
-# 12. Enable and start xrdp
+# 13. Enable and start xrdp
 #------------------------------------------------------------------------------
 log "Enabling and starting xrdp services..."
 systemctl daemon-reload
@@ -371,7 +388,7 @@ systemctl restart xrdp
 sleep 2
 
 #------------------------------------------------------------------------------
-# 13. Verify
+# 14. Verify
 #------------------------------------------------------------------------------
 echo
 log "=== Verification ==="
@@ -397,7 +414,7 @@ else
 fi
 
 #------------------------------------------------------------------------------
-# 14. Done — print connection instructions
+# 15. Done — print connection instructions
 #------------------------------------------------------------------------------
 SERVER_IP=$(hostname -I | awk '{print $1}')
 echo
