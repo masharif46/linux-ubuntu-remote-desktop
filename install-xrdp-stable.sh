@@ -43,9 +43,19 @@ log "Stopping and purging existing xrdp..."
 systemctl stop xrdp xrdp-sesman 2>/dev/null || true
 systemctl disable xrdp xrdp-sesman 2>/dev/null || true
 
-# Kill any zombie sessions
-pkill -9 -f xrdp 2>/dev/null || true
-loginctl terminate-user "$TARGET_USER" 2>/dev/null || true
+# Kill any zombie xrdp processes (targeted — avoid self-matching the script)
+pkill -9 -x xrdp 2>/dev/null || true
+pkill -9 -x xrdp-sesman 2>/dev/null || true
+pkill -9 -x xrdp-chansrv 2>/dev/null || true
+pkill -9 -f 'Xorg.*xrdp/xorg.conf' 2>/dev/null || true
+
+# Terminate stale xrdp user sessions, but NOT the user running the script —
+# loginctl terminate-user would kill our own SSH session and SIGKILL the script.
+if [[ "$TARGET_USER" != "${SUDO_USER:-}" ]]; then
+    loginctl terminate-user "$TARGET_USER" 2>/dev/null || true
+else
+    warn "Skipping 'loginctl terminate-user $TARGET_USER' (would kill this SSH session)"
+fi
 
 apt-get remove --purge -y xrdp xorgxrdp 2>/dev/null || true
 rm -rf /etc/xrdp /var/log/xrdp* "$TARGET_HOME"/.xorgxrdp.*.log 2>/dev/null || true
@@ -311,10 +321,13 @@ ok "Polkit rules installed"
 #------------------------------------------------------------------------------
 log "Configuring UFW (3389 localhost-only)..."
 if command -v ufw >/dev/null 2>&1; then
+    # Allow SSH BEFORE enabling UFW — otherwise a fresh UFW activation with
+    # default deny-incoming locks remote users out of their own server.
+    ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null 2>&1 || true
     ufw --force enable >/dev/null 2>&1 || true
     ufw allow from 127.0.0.1 to any port 3389 proto tcp >/dev/null 2>&1 || true
     ufw deny 3389/tcp >/dev/null 2>&1 || true
-    ok "Firewall: 3389 allowed from 127.0.0.1 only"
+    ok "Firewall: SSH (22) allowed; 3389 allowed from 127.0.0.1 only"
 else
     warn "ufw not available, skipping firewall rules"
 fi
