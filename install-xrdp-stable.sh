@@ -321,13 +321,26 @@ ok "Polkit rules installed"
 #------------------------------------------------------------------------------
 log "Configuring UFW (3389 localhost-only)..."
 if command -v ufw >/dev/null 2>&1; then
+    # Detect SSH port(s) actually in use — works for custom ports, not just 22.
+    # Primary: parse listening sockets (works even if sshd_config is unusual).
+    # Fallback: sshd's effective config. Final fallback: port 22.
+    SSH_PORTS=$(ss -tlnp 2>/dev/null | awk '/sshd/ {n=split($4,a,":"); print a[n]}' | sort -u)
+    if [[ -z "$SSH_PORTS" ]] && command -v sshd >/dev/null 2>&1; then
+        SSH_PORTS=$(sshd -T 2>/dev/null | awk '/^port / {print $2}' | sort -u)
+    fi
+    SSH_PORTS=${SSH_PORTS:-22}
+    log "Detected SSH port(s): $(echo $SSH_PORTS | tr '\n' ' ')"
+
     # Allow SSH BEFORE enabling UFW — otherwise a fresh UFW activation with
     # default deny-incoming locks remote users out of their own server.
-    ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null 2>&1 || true
+    for port in $SSH_PORTS; do
+        ufw allow "$port/tcp" >/dev/null 2>&1 || true
+    done
+
     ufw --force enable >/dev/null 2>&1 || true
     ufw allow from 127.0.0.1 to any port 3389 proto tcp >/dev/null 2>&1 || true
     ufw deny 3389/tcp >/dev/null 2>&1 || true
-    ok "Firewall: SSH (22) allowed; 3389 allowed from 127.0.0.1 only"
+    ok "Firewall: SSH ($(echo $SSH_PORTS | tr '\n' ' ')) allowed; 3389 allowed from 127.0.0.1 only"
 else
     warn "ufw not available, skipping firewall rules"
 fi
