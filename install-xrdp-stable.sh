@@ -102,7 +102,21 @@ if [[ -f /etc/gdm3/custom.conf ]]; then
 fi
 
 #------------------------------------------------------------------------------
-# 5. Configure .xsession for the target user (XFCE)
+# 5. Allow non-console users to start Xorg (required for xrdp)
+#------------------------------------------------------------------------------
+# xserver-xorg-legacy wraps Xorg with /usr/lib/xorg/Xorg.wrap, which by default
+# only lets physically-logged-in console users start an X server. xrdp launches
+# Xorg via PAM/sesman as a non-console user, so without this it dies with
+# "Only console users are allowed to run the X server" — exit code 1, no log.
+log "Configuring Xwrapper to allow xrdp sessions..."
+cat > /etc/X11/Xwrapper.config <<'EOF'
+allowed_users=anybody
+needs_root_rights=yes
+EOF
+ok "Xwrapper.config: allowed_users=anybody"
+
+#------------------------------------------------------------------------------
+# 6. Configure .xsession for the target user (XFCE)
 #------------------------------------------------------------------------------
 log "Configuring XFCE session for $TARGET_USER..."
 cat > "$TARGET_HOME/.xsession" <<'EOF'
@@ -127,7 +141,7 @@ chown "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.xsessionrc"
 ok ".xsession and .xsessionrc created"
 
 #------------------------------------------------------------------------------
-# 6. Write /etc/xrdp/xrdp.ini (localhost-only, stable settings)
+# 7. Write /etc/xrdp/xrdp.ini (localhost-only, stable settings)
 #------------------------------------------------------------------------------
 log "Writing /etc/xrdp/xrdp.ini..."
 cat > /etc/xrdp/xrdp.ini <<'EOF'
@@ -203,7 +217,7 @@ EOF
 ok "xrdp.ini written (binding to 127.0.0.1:3389)"
 
 #------------------------------------------------------------------------------
-# 7. Write /etc/xrdp/sesman.ini (session persistence settings)
+# 8. Write /etc/xrdp/sesman.ini (session persistence settings)
 #------------------------------------------------------------------------------
 log "Writing /etc/xrdp/sesman.ini..."
 cat > /etc/xrdp/sesman.ini <<'EOF'
@@ -259,7 +273,7 @@ EOF
 ok "sesman.ini written (Policy=UBDI, sessions never killed)"
 
 #------------------------------------------------------------------------------
-# 8. Patch /etc/xrdp/startwm.sh to honor .xsession
+# 9. Patch /etc/xrdp/startwm.sh to honor .xsession
 #------------------------------------------------------------------------------
 log "Patching /etc/xrdp/startwm.sh..."
 cat > /etc/xrdp/startwm.sh <<'EOF'
@@ -293,7 +307,7 @@ chmod +x /etc/xrdp/startwm.sh
 ok "startwm.sh patched"
 
 #------------------------------------------------------------------------------
-# 9. Fix polkit popups (color manager auth dialog inside RDP)
+# 10. Fix polkit popups (color manager auth dialog inside RDP)
 #------------------------------------------------------------------------------
 log "Adding polkit rules to suppress auth popups..."
 mkdir -p /etc/polkit-1/localauthority/50-local.d
@@ -317,7 +331,7 @@ EOF
 ok "Polkit rules installed"
 
 #------------------------------------------------------------------------------
-# 10. Firewall: allow 3389 only from localhost
+# 11. Firewall: allow 3389 only from localhost
 #------------------------------------------------------------------------------
 log "Configuring UFW (3389 localhost-only)..."
 if command -v ufw >/dev/null 2>&1; then
@@ -346,7 +360,7 @@ else
 fi
 
 #------------------------------------------------------------------------------
-# 11. Enable and start xrdp
+# 12. Enable and start xrdp
 #------------------------------------------------------------------------------
 log "Enabling and starting xrdp services..."
 systemctl daemon-reload
@@ -357,7 +371,7 @@ systemctl restart xrdp
 sleep 2
 
 #------------------------------------------------------------------------------
-# 12. Verify
+# 13. Verify
 #------------------------------------------------------------------------------
 echo
 log "=== Verification ==="
@@ -383,7 +397,7 @@ else
 fi
 
 #------------------------------------------------------------------------------
-# 13. Done — print connection instructions
+# 14. Done — print connection instructions
 #------------------------------------------------------------------------------
 SERVER_IP=$(hostname -I | awk '{print $1}')
 echo
