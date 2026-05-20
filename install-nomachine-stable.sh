@@ -24,8 +24,8 @@ set -euo pipefail
 # Find the current release at https://www.nomachine.com/download/linux
 # Then re-run with:  sudo NM_VERSION=X.Y.Z NM_BUILD=N ./install-nomachine-stable.sh
 # Or pre-download the .deb and pass:  sudo NM_DEB_PATH=/path/to/file.deb ...
-NM_VERSION="${NM_VERSION:-8.16.1}"
-NM_BUILD="${NM_BUILD:-1}"
+NM_VERSION="${NM_VERSION:-9.5.7}"
+NM_BUILD="${NM_BUILD:-2}"
 NM_PORT="${NM_PORT:-4000}"
 
 #------------------------------------------------------------------------------
@@ -126,6 +126,29 @@ else
     fi
     ok "Downloaded: $TMP_DEB ($(du -h "$TMP_DEB" | cut -f1))"
 fi
+
+# curl -f only catches HTTP errors. If NoMachine's CDN returns 200 with an
+# HTML error page (e.g. the pinned version was retired), the file we just
+# wrote is HTML -- apt-get would later fail with "Invalid archive signature"
+# leaving the install half-done. Catch it here with a real Debian-package
+# header check so the error message points at the actual cause.
+log "Validating downloaded package..."
+if ! dpkg-deb -I "$TMP_DEB" >/dev/null 2>&1; then
+    err "Downloaded file is NOT a valid Debian package."
+    err "  Size: $(du -h "$TMP_DEB" | cut -f1) (expected ~60-80 MB)"
+    err ""
+    err "Most likely NM_VERSION=${NM_VERSION} NM_BUILD=${NM_BUILD} is no longer"
+    err "hosted by NoMachine and the URL returned an HTML error page."
+    err ""
+    err "Find the current version at https://www.nomachine.com/download/linux"
+    err "Then re-run with:"
+    err "    sudo NM_VERSION=X.Y.Z NM_BUILD=N $0"
+    err "Or download the .deb manually and re-run with:"
+    err "    sudo NM_DEB_PATH=/path/to/file.deb $0"
+    [[ -z "${NM_DEB_PATH:-}" ]] && rm -f "$TMP_DEB"
+    die "Aborting."
+fi
+ok "Package signature valid"
 
 #------------------------------------------------------------------------------
 # 4. Install NoMachine
