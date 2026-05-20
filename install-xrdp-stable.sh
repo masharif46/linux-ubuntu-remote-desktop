@@ -261,7 +261,12 @@ MaxSessions=50
 KillDisconnected=false
 DisconnectedTimeLimit=0
 IdleTimeLimit=0
-Policy=UBDI
+# Policy fields that must match for an existing session to be reattached:
+#   U=Username, B=BitsPerPixel, D=DisplaySize, I=ClientIP, C=Connection
+# We deliberately drop D so a reconnecting client gets its old session back
+# even if mstsc renegotiates a different resolution after a flaky network drop
+# (otherwise the old session is left orphaned and the user lands on a fresh desktop).
+Policy=UB
 
 [Logging]
 LogFile=xrdp-sesman.log
@@ -287,7 +292,7 @@ EnableFuseMount=true
 [SessionVariables]
 PULSE_SCRIPT=/etc/xrdp/pulse/default.pa
 EOF
-ok "sesman.ini written (Policy=UBDI, sessions never killed)"
+ok "sesman.ini written (Policy=UB, sessions never killed, reattach on reconnect)"
 
 #------------------------------------------------------------------------------
 # 10. Patch /etc/xrdp/startwm.sh to honor .xsession
